@@ -12,6 +12,8 @@
     --control: rgba(10, 10, 10, .5);
     --hover: rgba(255, 255, 255, .06);
     --selected: rgba(255, 255, 255, .1);
+    --menu: #1b1b1b;
+    --menu-selected: #3c3528;
     --accent: #70c6d1;
 }
 * {
@@ -44,14 +46,35 @@ button, select, input {
     border-radius: 3px;
     background: var(--control);
 }
-button:hover:not(:disabled), button:focus-visible {
+button:hover:not(:disabled), button:focus-visible, select:hover {
     border-color: var(--gold);
     background-color: var(--hover);
 }
-input:focus, select:focus {
+select {
+    padding: 6px 10px;
+    cursor: pointer;
+}
+/* Native OBS/CEF popups need opaque colors; the translucent control background is not inherited. */
+select, select option, select optgroup {
+    color-scheme: dark;
+    background-color: var(--menu);
+    color: var(--ink);
+}
+select optgroup {
+    color: var(--gold);
+    font-style: normal;
+}
+select option {
+    font-weight: normal;
+}
+select:hover, select option:checked {
+    background-color: var(--menu-selected);
+    color: var(--gold);
+}
+input:focus {
     outline: 1px solid var(--gold);
 }
-button:focus-visible {
+button:focus-visible, select:focus-visible {
     outline: 2px solid var(--gold);
     outline-offset: 2px;
 }
@@ -259,13 +282,13 @@ p {
 }
 input, select {
     min-width: 0;
-    padding: 8px 10px;
     color: var(--ink);
     max-width: 100%;
 }
 input {
     flex: 1;
     width: 140px;
+    padding: 8px 10px;
     background: var(--control);
 }
 input::placeholder {
@@ -496,7 +519,6 @@ input::placeholder {
 .portrait > select {
     display: block;
     margin: 12px auto 5px;
-    padding: 4px 8px;
     width: 100%;
 }
 .stats {
