@@ -1,0 +1,18 @@
+[worldserver]
+
+# Startup-only. An empty endpoint disables capture and the HTTP worker.
+CharWidget.Enable = 1
+CharWidget.Endpoint = ""
+# Endpoint ends in /characters; /catalogs is its sibling on the same server.
+CharWidget.BearerToken = ""
+CharWidget.CAFile = ""
+# CharWidget.SourceId = "realm-1"
+# Comma-separated character names or full GUID strings; empty means all online characters.
+CharWidget.Characters = ""
+# Sampling 1000..5000 ms; complete retransmission every 10 seconds.
+CharWidget.UpdateIntervalMs = 2000
+CharWidget.AchievementReconcileMs = 30000
+# Serialized queue budget, 8..256 MiB. JSON/container overhead is additional.
+CharWidget.QueueBytes = 67108864
+CharWidget.ConnectTimeoutMs = 750
+CharWidget.RequestTimeoutMs = 1500

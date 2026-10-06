@@ -1,0 +1,6 @@
+receiver/node_modules/
+receiver/data/
+receiver/icons/manifest.json
+receiver/icons/*.png
+receiver/icons/*.jpg
+receiver/icons/*.webp
