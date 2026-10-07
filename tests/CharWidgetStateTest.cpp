@@ -12,6 +12,24 @@ Snapshot Make(std::string key, std::uint64_t sequence, Time now = {})
     return {key, sequence, now, {{"guid", "Alice"}, {"panel", key}, {"data", Json::object()}}};
 }
 
+TEST(CharWidgetState, WatchTargetClearingSurvivesRetryAndSerialization)
+{
+    SnapshotQueue queue;
+    auto observed = Make("Observer/presence", 1);
+    observed.Data["data"]["watch_target"] = {{"guid", "Watched"}, {"name", "Watched"}};
+    EXPECT_TRUE(queue.Push(observed));
+    auto flight = queue.Take(Time{});
+    auto published = Batch("realm", "process", flight, Time{});
+    EXPECT_EQ(published["updates"][0]["data"]["watch_target"]["guid"], "Watched");
+    observed.Sequence = 2;
+    observed.Data["data"]["watch_target"] = nullptr;
+    EXPECT_TRUE(queue.Push(observed));
+    queue.Retry(std::move(flight), Time{} + 100ms);
+    auto result = Batch("realm", "process", queue.Take(Time{} + 100ms), Time{} + 100ms);
+    EXPECT_TRUE(result["updates"][0]["data"]["watch_target"].is_null());
+    EXPECT_EQ(result["updates"][0]["sequence"], "2");
+}
+
 TEST(CharWidgetState, ReputationRankBoundariesAndNegativeStandings)
 {
     std::array<int, 8> const starts{-42000, -6000, -3000, 0, 3000, 9000, 21000, 42000};

@@ -65,6 +65,11 @@ export class PanelRenderer {
     this.live = false; this.timerAge = 0; this.needsRender = true;
     this.detail = el("aside", "detail scroll"); this.detail.dataset.scroll = "detail";
   }
+  reset() {
+    this.view = null; this.records.clear(); this.pinned = ""; this.hovered = "";
+    this.page = 0; this.spec = -1; this.live = false; this.timerAge = 0; this.needsRender = true;
+    this.host.replaceChildren();
+  }
   /** @param {View} view @param {Catalog} catalog @param {boolean} [changed] */
   update(view, catalog, changed = true) {
     const live = !view.stale && view.presence === "online" && Boolean(view.panels[this.panel]) &&

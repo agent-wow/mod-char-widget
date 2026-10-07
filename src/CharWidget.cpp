@@ -2,6 +2,7 @@
 #include "CharWidgetProjection.h"
 #include "CharWidgetSender.h"
 #include "Config.h"
+#include "WidgetWatch.h"
 #include "CryptoRandom.h"
 #include "Log.h"
 #include "Player.h"
@@ -50,6 +51,7 @@ struct Track
     std::map<std::string, std::pair<std::size_t, Time>> Sent;
     Json Achievement;
     Json Revisions = Json::object();
+    Json WatchTarget;
     std::size_t CachedBytes = 0;
 };
 
@@ -125,6 +127,9 @@ public:
         if (!_sender)
             return;
         auto now = Now();
+        bool checkWatch = now >= _nextWatch;
+        if (checkWatch)
+            _nextWatch = now + Milliseconds(250);
         unsigned captured = 0;
         // The world hook runs after map workers join. All live object reads finish in this call.
         for (auto const& [account, session] : sWorldSessionMgr->GetAllSessions())
@@ -144,6 +149,17 @@ public:
             }
             auto& track = found->second;
             track.LastSeen = now;
+            if (checkWatch)
+            {
+                auto target = WidgetWatch::Capture<Json>(player);
+                if (target != track.WatchTarget)
+                {
+                    track.WatchTarget = std::move(target);
+                    Push(player, "presence", {{"presence", player->IsInWorld() && !player->IsBeingTeleported()
+                        && track.Revisions.size() == 7
+                        ? "online" : "unavailable"}, {"revisions", track.Revisions}}, now);
+                }
+            }
             if (now < track.Next || captured >= 8)
                 continue;
             ++captured;
@@ -233,6 +249,8 @@ private:
 
     std::uint64_t Push(Player* player, std::string const& panel, Json data, Time now)
     {
+        if (panel == "presence")
+            data["watch_target"] = WidgetWatch::Capture<Json>(player, data["presence"] == "offline");
         auto guid = player->GetGUID().ToString();
         _sender->Push({guid + "/" + panel, ++_sequence, now, {{"guid", guid}, {"name", player->GetName()},
             {"panel", panel}, {"catalog_revision", _process}, {"data", std::move(data)}}});
@@ -253,6 +271,7 @@ private:
     uint32 _interval = 2000;
     uint32 _reconcile = 30000;
     Time _nextError{};
+    Time _nextWatch{};
 };
 
 class World final : public WorldScript
