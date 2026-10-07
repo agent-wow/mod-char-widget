@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+import { resolveObserver, validFollow, SelectionError } from "./follow.js";
 import { PanelRenderer, labels, symbols, el } from "./render.js";
 /** @typedef {import('../schema.ts').View} View */
 /** @typedef {import('../schema.ts').Catalog} Catalog */
 /** @typedef {import('../schema.ts').Panel} Panel */
 const panels = /** @type {Panel[]} */ (Object.keys(labels));
 const params = new URLSearchParams(location.search);
+const follow = params.get("follow") === "watch";
 const mode = params.get("panel") ?? "all";
 const source = params.get("source");
 const character = params.get("character");
@@ -80,11 +82,17 @@ async function loadCatalog() {
 }
 /** @param {View | null} next @param {boolean} [replace] */
 function snapshot(next, replace = true) {
-  if (!next) { if (!view) setStatus("Waiting for this character…"); return; }
-  const same = view?.process_id === next.process_id && view.catalog_revision === next.catalog_revision;
+  if (!next) {
+    view = null;
+    for (const renderer of renderers.values()) renderer.reset();
+    setStatus("Waiting for observer or character data…"); return;
+  }
+  const same = view?.guid === next.guid && view.process_id === next.process_id &&
+    view.catalog_revision === next.catalog_revision;
+  if (!same) for (const renderer of renderers.values()) renderer.reset();
   const prior = same ? view?.panels : undefined;
   view = { ...next, panels: replace ? next.panels : { ...prior, ...next.panels } };
-  received = performance.now(); guid = next.guid;
+  received = performance.now(); if (!follow) guid = next.guid;
   if (!same) { catalogKey = "";
     catalog = { achievements: [], criteria: [], categories: [], trees: [], talents: [] }; }
   for (const panel of Object.keys(next.panels)) {
@@ -95,7 +103,9 @@ function snapshot(next, replace = true) {
 async function connect() {
   if (stopped) return;
   try {
+    guid = await resolveObserver(source, guid, character, follow);
     const query = new URLSearchParams({ source: source ?? "", panel: mode });
+    if (follow) query.set("follow", "watch");
     query.set(guid ? "guid" : "character", guid ?? character ?? "");
     const response = await fetch(`/api/character?${query}`, { cache: "no-store", signal: AbortSignal.timeout(5000) });
     if (!response.ok) {
@@ -105,11 +115,17 @@ async function connect() {
     }
     snapshot(await response.json());
     if (guid) { query.delete("character"); query.set("guid", guid); }
-    connection?.close(); connection = new EventSource(`/api/character/stream?${query}`);
-    connection.onopen = () => { failures = 0; };
-    connection.addEventListener("snapshot", (event) => snapshot(JSON.parse(event.data), false));
-    connection.addEventListener("presence", (event) => snapshot(JSON.parse(event.data), false));
-    connection.addEventListener("panel", (event) => {
+    connection?.close();
+    const current = new EventSource(`/api/character/stream?${query}`); connection = current;
+    current.onopen = () => { if (connection !== current || stopped) return; failures = 0; };
+    current.addEventListener("snapshot", (event) => {
+      if (connection === current && !stopped) snapshot(JSON.parse(event.data), false);
+    });
+    current.addEventListener("presence", (event) => {
+      if (connection === current && !stopped) snapshot(JSON.parse(event.data), false);
+    });
+    current.addEventListener("panel", (event) => {
+      if (connection !== current || stopped) return;
       if (!view) return;
       const data = JSON.parse(event.data);
       if (!panels.includes(data.panel)) return;
@@ -117,8 +133,17 @@ async function connect() {
         sequence: data.sequence, age_ms: data.age_ms, stale: data.stale, data: data.data };
       display(data.panel);
     });
-    connection.onerror = () => { connection?.close(); setStatus("Reconnecting…"); schedule(); };
-  } catch { schedule(); }
+    current.onerror = () => {
+      if (connection !== current || stopped) return;
+      current.close(); setStatus("Reconnecting…"); schedule();
+    };
+  } catch (error) {
+    if (error instanceof SelectionError) {
+      setStatus(error.message);
+      if ([400, 409].includes(error.status)) { stopped = true; return; }
+    }
+    schedule();
+  }
 }
 function schedule() {
   if (stopped) return;
@@ -132,7 +157,7 @@ const ticker = setInterval(() => {
   renderers.get(selected)?.tick();
   if (view && !catalogKey && !loadingKey) void loadCatalog();
 }, 500);
-if (!source || Boolean(guid) === Boolean(character) ||
+if (!validFollow(params) || !source || Boolean(guid) === Boolean(character) ||
   (mode !== "all" && !panels.includes(/** @type {Panel} */ (mode)))) {
   setStatus("Use /widget?source=realm-1&character=Alice&panel=all");
 } else {

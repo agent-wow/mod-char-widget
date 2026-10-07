@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
+import { isWatchTarget } from "./watch.ts";
+import type { WatchTarget } from "./watch.ts";
 export const STALE_MS = 15000;
 export const MAX_PANEL_BYTES = 2 * 1024 * 1024;
 export const PANELS = ["info", "reputation", "skills", "talents", "achievements", "quests", "inventory"] as const;
@@ -55,7 +57,9 @@ export interface PanelData {
   info: Info; reputation: Reputation; skills: Skills; talents: Talents;
   achievements: Achievements; quests: Quests; inventory: Inventory;
 }
-export interface PresenceData { presence: Presence; revisions?: Partial<Record<Panel, string>> }
+export interface PresenceData {
+  presence: Presence; revisions?: Partial<Record<Panel, string>>; watch_target?: WatchTarget | null;
+}
 export interface Update {
   guid: string; name: string; panel: Panel | "presence"; sequence: string; age_ms: number;
   catalog_revision: string; data: PanelData[Panel] | PresenceData;
@@ -88,6 +92,7 @@ export interface CatalogChunk {
 }
 export interface PanelView { sequence: string; age_ms: number; stale: boolean; data: PanelData[Panel] }
 export interface View {
+  watch_target?: WatchTarget | null;
   source_id: string; process_id: string; guid: string; name: string; presence: Presence;
   stale: boolean; age_ms: number; catalog_revision: string; sequence: string;
   panels: Partial<Record<Panel, PanelView>>;
@@ -165,7 +170,8 @@ function update(v: unknown): boolean {
   if (!object(v) || !identity(v.guid) || !identity(v.name) || !sequence(v.sequence) ||
     !int(v.age_ms, 0, 86400000) || !revision(v.catalog_revision)) return false;
   if (v.panel === "presence") {
-    if (!object(v.data) || !["online", "offline", "unavailable"].includes(v.data.presence as string)) return false;
+    if (!object(v.data) || !isWatchTarget(v.data.watch_target) ||
+      !["online", "offline", "unavailable"].includes(v.data.presence as string)) return false;
     const revisions = v.data.revisions;
     return v.data.presence !== "online" || (object(revisions) && PANELS.every((p) => sequence(revisions[p])));
   }
